@@ -1,0 +1,178 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Sales Forecasting Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f2f4f1;--card:#fff;--ink:#16231f;--mut:#5d6b66;--line:#d9dfdb;--ac:#0b6b61;--fc:#b45309;--bad:#b42318;--ok:#17803d;--grid:#e3e8e5;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101916;--card:#17231f;--ink:#e6eeea;--mut:#9aaaa3;--line:#2a3a34;--ac:#3fb8a8;--fc:#e8a04a;--bad:#f07a6e;--ok:#5cc98a;--grid:#243029}}
+:root[data-theme="dark"]{--bg:#101916;--card:#17231f;--ink:#e6eeea;--mut:#9aaaa3;--line:#2a3a34;--ac:#3fb8a8;--fc:#e8a04a;--bad:#f07a6e;--ok:#5cc98a;--grid:#243029}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Public Sans",system-ui,sans-serif}
+.w{max-width:1280px;margin:0 auto;padding:16px}
+h1{font:600 26px/1.2 Fraunces,Georgia,serif;margin:0}h2{font:600 18px Fraunces,Georgia,serif;margin:0 0 10px}
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.badge{padding:3px 10px;border-radius:99px;font-size:13px;font-weight:600;border:1px solid var(--line)}.demo{color:var(--fc);border-color:var(--fc)}.up{color:var(--ok);border-color:var(--ok)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0;align-items:end}.bar label{font-size:12px;color:var(--mut);display:flex;flex-direction:column;gap:2px}
+select,input,button{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+button{cursor:pointer;font-weight:500}button.p{background:var(--ac);color:#fff;border-color:var(--ac)}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+nav{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line);margin-bottom:14px}nav button{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;padding:8px 12px;white-space:nowrap;color:var(--mut)}nav button.on{color:var(--ink);border-color:var(--ac)}
+.g{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}.g2{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));margin-top:12px}
+.c{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.k .l{font-size:12.5px;color:var(--mut)}.k .v{font:600 24px Fraunces,Georgia,serif;margin:2px 0}.k .s{font-size:12.5px;color:var(--mut)}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--fc)}
+.cv{position:relative;height:280px}.sc{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13.5px}th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{color:var(--mut);font-weight:600}
+ul{margin:6px 0;padding-left:20px}li{margin:4px 0}.note{font-size:13px;color:var(--mut)}.pb{height:8px;background:var(--grid);border-radius:4px;overflow:hidden}.pb i{display:block;height:100%;background:var(--ac)}
+#toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;display:none;z-index:9}
+</style></head><body><div class="w">
+<header><div><h1>Sales Forecasting Tool</h1><div class="note">Forecasts are estimates from your data, not guaranteed results.</div></div><span id="src" class="badge"></span></header>
+<div class="bar" id="flt"></div><nav id="nav"></nav><main id="main"></main></div><div id="toast" role="status"></div>
+<script>
+const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let ROWS=[],DEMO=[],SRC='Demo data',WARN=[],F={},CUR='USD',H=6,TGT=null,TAB='dash',CH={},TR='M',FT=new Map(),C={};const T0=new Date();
+const money=v=>v==null||isNaN(v)?'–':new Intl.NumberFormat('en',{style:'currency',currency:CUR,notation:Math.abs(v)>=1e6?'compact':'standard',maximumFractionDigits:Math.abs(v)>=1e6?2:0}).format(v);
+const pct=v=>v==null||!isFinite(v)?'n/a':(v*100).toFixed(1)+'%',sum=a=>a.reduce((x,y)=>x+y,0),avg=a=>a.length?sum(a)/a.length:0;
+const mi=d=>d.getFullYear()*12+d.getMonth(),ml=i=>new Date(Math.floor(i/12),i%12,1).toLocaleDateString('en',{month:'short',year:'2-digit'});
+const ds=d=>d?d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'–',iso=d=>d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`:'';
+const col=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',4000)}
+/* ---------- data ---------- */
+function mul(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function fin(r){r.close??=null;r.date??=null;r.target??=null;r.actual??=null;const s=(r.stage||'').toLowerCase();r.won=/won|closed|paid/.test(s)&&!/lost/.test(s);r.lost=/lost/.test(s);r.open=!r.won&&!r.lost;r.rev=r.actual!=null?r.actual:(r.won?(r.value||0):0);r.d=r.date||r.close;return r}
+function demo(){const r=mul(2024),pk=a=>a[Math.floor(r()*a.length)],Cu=['Northwind Retail','Apex Logistics','Bluefin Foods','Cedar Health','Delta Motors','Evergreen Edu','Futura Energy','Granite Builders','Helix Pharma','Indus Textiles'],P=['Analytics Suite','Cloud Hosting','Consulting','Support Plan','Training'],S=['A. Rao','M. Chen','S. Okafor','L. Meyer'],R=['North','South','East','West'],o=[],y=T0.getFullYear(),m=T0.getMonth();
+for(let k=24;k>=1;k--){const b=new Date(y,m-k,1),se=1+.2*Math.sin((b.getMonth()-3)/12*6.283),gr=1+(24-k)*.014,n=13+Math.floor(r()*5);for(let i=0;i<n;i++)o.push({date:new Date(b.getFullYear(),b.getMonth(),1+Math.floor(r()*27)),customer:pk(Cu),product:pk(P),rep:pk(S),region:pk(R),value:Math.round((5000+r()*15000)*se*gr/100)*100,stage:'Closed Won',prob:1})}
+const st=[['Prospecting',.1],['Qualified',.3],['Proposal',.5],['Negotiation',.75]];
+for(let i=0;i<34;i++){const s=pk(st);o.push({close:new Date(+T0+(Math.floor(r()*170)-25)*864e5),customer:pk(Cu),product:pk(P),rep:pk(S),region:pk(R),value:Math.round((8000+r()*40000)/100)*100,stage:s[0],prob:s[1]})}
+return o.map(fin)}
+const AL={date:['sales date','date','order date','sale date','invoice date'],customer:['customer','customer name','client','account'],product:['product','service','product or service','product/service','item'],rep:['salesperson','sales rep','rep','owner','sales person'],region:['region','territory','area'],value:['deal value','value','amount','deal amount'],stage:['sales stage','stage','status','deal stage'],close:['expected closing date','expected close date','close date','closing date'],prob:['probability of closing','probability','prob','win probability'],target:['sales target','target'],actual:['actual revenue','actual','revenue']};
+function pd(v){if(v==null||v==='')return null;if(v instanceof Date)return isNaN(v)?null:v;if(typeof v==='number')return v>20000&&v<80000?new Date(Math.round((v-25569)*864e5)+T0.getTimezoneOffset()*6e4):null;const s=String(v).trim(),m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);if(m)return new Date(+m[3],+m[2]-1,+m[1]);const d=new Date(s);return isNaN(d)?null:d}
+const num=v=>{if(v===''||v==null)return null;if(typeof v==='number')return v;const n=parseFloat(String(v).replace(/[^0-9.\-]/g,''));return isNaN(n)?null:n};
+function ingest(objs){const keys=Object.keys(objs[0]||{}),map={};for(const f in AL){const k=keys.find(k=>AL[f].includes(String(k).toLowerCase().trim()));if(k)map[f]=k}
+if(!map.value&&!map.actual)return{err:'Missing a "Deal Value" or "Actual Revenue" column. Columns found: '+keys.join(', ')};
+if(!map.date&&!map.close)return{err:'Missing a "Sales Date" or "Expected Closing Date" column. Columns found: '+keys.join(', ')};
+const W=[],seen=new Set(),rows=[];let dup=0,bad=0,mv=0,mp=0,mc=0;
+for(const o of objs){const g=f=>map[f]?o[map[f]]:null,s=v=>String(v??'').trim();
+const r={date:pd(g('date')),close:pd(g('close')),customer:s(g('customer'))||'Unspecified',product:s(g('product'))||'Unspecified',rep:s(g('rep'))||'Unspecified',region:s(g('region'))||'Unspecified',value:num(g('value')),prob:num(g('prob')),target:num(g('target')),actual:num(g('actual')),stage:s(g('stage'))};
+if(r.prob!=null&&r.prob>1)r.prob/=100;if(!r.stage)r.stage=r.date?'Closed Won':'Open';
+const k=JSON.stringify([+r.date||0,+r.close||0,r.customer,r.product,r.rep,r.value,r.stage,r.actual]);if(seen.has(k)){dup++;continue}seen.add(k);fin(r);
+if(r.value==null&&r.actual==null){mv++;continue}if(!r.d){bad++;continue}if(r.open){if(r.prob==null)mp++;if(!r.close)mc++}rows.push(r)}
+const L={customer:'Customer',product:'Product/Service',rep:'Salesperson',region:'Region',stage:'Sales Stage',prob:'Probability of Closing',close:'Expected Closing Date',target:'Sales Target'};
+for(const f in L)if(!map[f])W.push(`No "${L[f]}" column found; related views are limited${['customer','product','rep','region'].includes(f)?' (shown as "Unspecified")':''}.`);
+if(dup)W.push(`${dup} duplicate row(s) removed.`);if(mv)W.push(`${mv} row(s) skipped: no deal value or actual revenue.`);if(bad)W.push(`${bad} row(s) skipped: no valid date. Dates like 03/04/2025 are read as day/month/year.`);
+if(mp)W.push(`${mp} open deal(s) have no probability and count as 0 in weighted pipeline.`);if(mc)W.push(`${mc} open deal(s) have no expected closing date.`);
+return{rows,W}}
+/* ---------- calculations ---------- */
+function filt(){const f=F,ok=r=>(!f.rep||r.rep===f.rep)&&(!f.customer||r.customer===f.customer)&&(!f.region||r.region===f.region)&&(!f.product||r.product===f.product)&&(!f.stage||r.stage===f.stage);
+return{won:ROWS.filter(r=>r.rev>0&&ok(r)&&(!f.from||r.d>=f.from)&&(!f.to||r.d<=f.to)),open:ROWS.filter(r=>r.open&&ok(r))}}
+function fc(v,m0,h){const n=v.length;if(n<3)return null;const o={},ma=avg(v.slice(-3));o['3-month moving average']=Array(h).fill(ma);
+if(n>=7){const gs=[];for(let i=n-6;i<n;i++)if(v[i-1]>0)gs.push(v[i]/v[i-1]-1);const g=Math.max(-.05,Math.min(.05,avg(gs)));o['Recent growth rate (±5%/mo cap)']=Array.from({length:h},(_,i)=>ma*Math.pow(1+g,i+1))}
+const xs=v.map((_,i)=>i),mx=avg(xs),my=avg(v),b=sum(xs.map((x,i)=>(x-mx)*(v[i]-my)))/sum(xs.map(x=>(x-mx)**2)),a=my-b*mx,ln=i=>Math.max(0,a+b*i);o['Linear trend']=Array.from({length:h},(_,i)=>ln(n+i));
+if(n>=24){const q=Array.from({length:12},()=>[]);v.forEach((x,i)=>{const l=a+b*i;if(l>0)q[(m0+i)%12].push(x/l)});const ix=q.map(z=>z.length?avg(z):1),mn=avg(ix);o['Seasonal trend']=Array.from({length:h},(_,i)=>ln(n+i)*ix[(m0+n+i)%12]/mn)}
+const ms=Object.values(o),exp=Array.from({length:h},(_,i)=>avg(ms.map(z=>z[i]))),sd=Math.sqrt(avg(v.map((x,i)=>(x-(a+b*i))**2))),band=Math.max(.05,Math.min(.3,my?sd/my:.1));
+return{m:o,exp,band,cons:exp.map(x=>x*(1-band)),opt:exp.map(x=>x*(1+band))}}
+function backtest(v,m0){const t=v.slice(-3),f=fc(v.slice(0,-3),m0,3);if(!f)return null;const p=t.map((a,i)=>a>0?Math.abs(f.exp[i]-a)/a:null).filter(x=>x!=null);return p.length?{acc:Math.max(0,1-avg(p)),f:sum(f.exp),a:sum(t)}:null}
+function grp(rows,k){const m={};rows.forEach(r=>m[r[k]]=(m[r[k]]||0)+r.rev);return Object.entries(m).sort((a,b)=>b[1]-a[1])}
+function dec(won,k,end){const rc={},pr={};won.forEach(r=>{const m=mi(r.d);if(m>=end-3&&m<end)rc[r[k]]=(rc[r[k]]||0)+r.rev;else if(m>=end-6&&m<end-3)pr[r[k]]=(pr[r[k]]||0)+r.rev});return Object.keys(pr).filter(x=>pr[x]>0&&(rc[x]||0)/pr[x]-1<-.1).map(x=>({k:x,ch:(rc[x]||0)/pr[x]-1})).sort((a,b)=>a.ch-b.ch).slice(0,3)}
+function ftMap(){const m=new Map(),s=new Set();ROWS.forEach(r=>{if(r.target==null||!r.d||(F.rep&&r.rep!==F.rep))return;const k=mi(r.d)+'|'+r.rep;if(s.has(k))return;s.add(k);m.set(mi(r.d),(m.get(mi(r.d))||0)+r.target)});return m}
+function calc(){const{won,open}=filt();FT=ftMap();let sv=[],m0=0;if(won.length){const k=won.map(r=>mi(r.d));m0=Math.min(...k);sv=Array(Math.max(...k)-m0+1).fill(0);won.forEach(r=>sv[mi(r.d)-m0]+=r.rev)}
+let v=sv,partial=false;if(v.length&&m0+v.length-1===mi(T0)&&T0.getDate()<28){v=v.slice(0,-1);partial=true}
+const n=v.length,f=fc(v,m0,H),bt=n>=9?backtest(v,m0):null,fl=[...FT.entries()].sort((a,b)=>a[0]-b[0]),fb=fl.length?avg(fl.slice(-3).map(x=>x[1])):null,tg=m=>FT.get(m)??TGT??fb;
+const th=n?Array.from({length:H},(_,i)=>tg(m0+n+i)).every(x=>x!=null)?sum(Array.from({length:H},(_,i)=>tg(m0+n+i))):null:null;
+const hm=sv.map((_,i)=>tg(m0+i)),tH=hm.every(x=>x!=null)&&hm.length?sum(hm):null,rev=sum(won.map(r=>r.rev));
+const td=new Date(T0.getFullYear(),T0.getMonth(),T0.getDate()),op=open.map(r=>(r.value||0)),tot=sum(op),w=r=>(r.value||0)*(r.prob||0),wtd=sum(open.map(w));
+const od=open.filter(r=>r.close&&r.close<td),tm=open.filter(r=>r.close&&r.close>=td&&mi(r.close)===mi(T0)),rk=open.filter(r=>r.close&&r.close>=td&&(r.prob??0)<.3&&r.close<new Date(+td+60*864e5));
+const pm=Array.from({length:H},(_,i)=>sum(open.filter(r=>r.close&&mi(r.close)===m0+n+i).map(w))),last=n?v[n-1]:null;
+return{won,open,sv,v,m0,n,partial,f,bt,tg,th,tH,rev,tot,wtd,od,tm,rk,pm,mom:n>1&&v[n-2]>0?last/v[n-2]-1:null,yoy:n>12&&v[n-13]>0?last/v[n-13]-1:null,fsum:f?sum(f.exp):null}}
+function insights(c){const o=[];if(!c.won.length)return['No closed revenue matches the current filters.'];
+if(c.f){const e=sum(c.f.exp),lo=sum(c.f.cons),hi=sum(c.f.opt);if(c.th!=null){const g=e-c.th;o.push(`Next ${H} months: expected revenue ${money(e)} (range ${money(lo)}–${money(hi)}) against a target of ${money(c.th)}. ${g>=0?`The expected case clears the target by ${money(g)}`:`The expected case falls ${money(-g)} short`}${hi<c.th?'; even the optimistic case misses it.':lo>=c.th?', and so does the conservative case.':'.'}`)}else o.push(`Next ${H} months: expected revenue ${money(e)} (range ${money(lo)}–${money(hi)}). Set a target in Targets to see whether it is likely to be met.`)}else o.push('Not enough monthly history (need 3+ complete months) to forecast.');
+const gp=grp(c.won,'product'),gc=grp(c.won,'customer'),gs=grp(c.won,'rep');
+if(gp.length)o.push(`${gp[0][0]} is the largest product line at ${pct(gp[0][1]/c.rev)} of revenue.`);
+if(gc.length)o.push(`Top 3 customers (${gc.slice(0,3).map(x=>x[0]).join(', ')}) account for ${pct(sum(gc.slice(0,3).map(x=>x[1]))/c.rev)} of revenue${sum(gc.slice(0,3).map(x=>x[1]))/c.rev>.5?' — a concentration risk':''}.`);
+if(gs.length>1)o.push(`${gs[0][0]} leads on closed revenue (${money(gs[0][1])}); ${gs[gs.length-1][0]} is lowest (${money(gs[gs.length-1][1])}).`);
+if(c.n>=6){const e=c.m0+c.n;for(const[k,l]of[['product','product'],['region','region'],['customer','customer']]){const d=dec(c.won,k,e);if(d.length)o.push(`Declining ${l}s (last 3 months vs prior 3): ${d.map(x=>`${x.k} ${pct(x.ch)}`).join(', ')}.`)}}
+if(c.od.length)o.push(`${c.od.length} open deal(s) worth ${money(sum(c.od.map(r=>r.value||0)))} are past their expected close date and need a status update or re-dating.`);
+if(c.rk.length)o.push(`${c.rk.length} deal(s) worth ${money(sum(c.rk.map(r=>r.value||0)))} are due within 60 days with under 30% probability.`);
+if(c.f&&c.th!=null&&sum(c.f.exp)<c.th){const g=c.th-sum(c.f.exp);o.push(`To close the gap, about ${money(g/(H*52/12))} per week of extra sales is needed. Weighted pipeline of ${money(c.wtd)} covers ${pct(c.wtd/g)} of the gap if it all lands in this window.`)}
+return o}
+/* ---------- views ---------- */
+const kp=(l,v,s,t,tip)=>`<div class="c k" title="${esc(tip||'')}"><div class="l">${l}</div><div class="v ${t||''}">${v}</div><div class="s">${s||''}</div></div>`;
+const tbl=(h,r)=>`<div class="sc"><table><thead><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>${r.map(x=>`<tr>${x.map(y=>`<td>${y}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+const ach=(a,t)=>t?a/t:null,tone=a=>a==null?'':a>=1?'ok':a>=.85?'warn':'bad';
+const cv=(id,t)=>`<div class="c"><h2>${t}</h2><div class="cv"><canvas id="${id}"></canvas></div></div>`;
+function vDash(c){const a=ach(c.rev,c.tH);return`<div class="g">
+${kp('Total sales revenue',money(c.rev),c.won.length+' closed deals in view')}
+${kp('Sales target (period)',money(c.tH),c.tH==null?'Set one in Targets':'Sum of monthly targets over the data range')}
+${kp('Target achievement',pct(a),'',tone(a))}
+${kp(`Forecast revenue (${H} mo)`,money(c.fsum),c.f?`Range ${money(sum(c.f.cons))}–${money(sum(c.f.opt))}`:'Needs 3+ months of history','', 'Average of the statistical methods available for your data')}
+${kp('Actual vs forecast (last 3 mo)',c.bt?money(c.bt.a):'n/a',c.bt?`Backtest forecast ${money(c.bt.f)}`:'Needs 9+ months of history',c.bt?tone(c.bt.a/c.bt.f):'','Forecast made from earlier months only, compared to what happened')}
+${kp('Month-on-month growth',pct(c.mom),c.n?'Last complete month':'',c.mom==null?'':c.mom>=0?'ok':'bad')}
+${kp('Year-on-year growth',pct(c.yoy),c.yoy==null?'Needs 13+ months':'Last month vs same month last year',c.yoy==null?'':c.yoy>=0?'ok':'bad')}
+${kp('Open pipeline',money(c.tot),c.open.length+' open deals (date filter not applied)')}
+${kp('Weighted pipeline',money(c.wtd),'Deal value × probability')}
+${kp('Forecast accuracy',c.bt?pct(c.bt.acc):'n/a',c.bt?'1 − error on last 3 months (backtest)':'Needs 9+ months of history','','Measured by forecasting the last 3 months from earlier data. Not a promise about future accuracy.')}</div>
+${c.partial?'<p class="note">The current, incomplete month is shown in totals but excluded from forecasting.</p>':''}
+<div class="g2">${cv('c1','Actual vs forecasted sales')}<div class="c"><h2>Revenue trend <select id="tr"><option value="M">Monthly</option><option value="Q">Quarterly</option></select></h2><div class="cv"><canvas id="c2"></canvas></div></div>
+${cv('c3','Sales by customer')}${cv('c4','Sales by product or service')}${cv('c5','Sales by salesperson')}${cv('c6','Sales by region')}${cv('c7','Sales target vs achievement (last 12 months)')}</div>`}
+function vFc(c){if(!c.f)return'<div class="c">Not enough history: forecasting needs at least 3 complete months of closed revenue.</div>';
+const rows=c.f.exp.map((_,i)=>[ml(c.m0+c.n+i),money(c.f.cons[i]),money(c.f.exp[i]),money(c.f.opt[i]),money(c.pm[i])]);rows.push(['<b>Total</b>','<b>'+money(sum(c.f.cons))+'</b>','<b>'+money(sum(c.f.exp))+'</b>','<b>'+money(sum(c.f.opt))+'</b>','<b>'+money(sum(c.pm))+'</b>']);
+return`<div class="c"><h2>Scenarios for the next ${H} months</h2>${tbl(['Month','Conservative','Expected','Optimistic','Weighted pipeline closing'],rows)}<p class="note">Weighted pipeline is shown for reference and is not added to the forecast, to avoid counting deals twice.</p></div>
+<div class="g2"><div class="c"><h2>Methods used</h2>${tbl(['Method',`${H}-month total`],Object.entries(c.f.m).map(([k,a])=>[k,money(sum(a))]))}<p class="note">Expected = average of these methods. Methods needing more history are skipped automatically.</p></div>
+<div class="c"><h2>Assumptions</h2><ul><li>Based on ${c.n} complete months of closed revenue under the current filters.</li><li>Conservative and optimistic cases are expected ∓${pct(c.f.band)}, from how far past months deviated from trend (limited to 5–30%).</li><li>No new pricing, market changes or one-off deals are assumed.</li><li>${c.bt?`Backtest accuracy on the last 3 months: ${pct(c.bt.acc)}.`:'Accuracy cannot be measured yet (needs 9+ months).'}</li></ul></div></div>`}
+function oTable(a){return a.length?tbl(['Customer','Product','Salesperson','Stage','Value','Prob.','Expected close'],a.slice(0,10).map(r=>[esc(r.customer),esc(r.product),esc(r.rep),esc(r.stage),money(r.value),r.prob==null?'–':pct(r.prob),ds(r.close)])):'<p class="note">None.</p>'}
+function vPipe(c){const st=Object.entries(c.open.reduce((m,r)=>{(m[r.stage]??={n:0,v:0,w:0});m[r.stage].n++;m[r.stage].v+=r.value||0;m[r.stage].w+=(r.value||0)*(r.prob||0);return m},{}));
+return`<div class="g">${kp('Total open pipeline',money(c.tot),c.open.length+' deals')}${kp('Weighted pipeline',money(c.wtd),'Value × probability')}${kp('Closing this month',money(sum(c.tm.map(r=>r.value||0))),c.tm.length+' deals')}${kp('Deals at risk',c.rk.length,money(sum(c.rk.map(r=>r.value||0)))+', <30% and due in 60 days',c.rk.length?'warn':'')}${kp('Overdue deals',c.od.length,money(sum(c.od.map(r=>r.value||0)))+' past close date',c.od.length?'bad':'')}${kp('Pipeline coverage',c.th?(c.tot/c.th).toFixed(2)+'×':'n/a','Open pipeline ÷ '+H+'-month target')}</div>
+<div class="g2"><div class="c"><h2>By stage</h2>${tbl(['Stage','Deals','Value','Weighted'],st.map(([k,x])=>[esc(k),x.n,money(x.v),money(x.w)]))}</div><div class="c"><h2>Overdue deals (largest first)</h2>${oTable(c.od.slice().sort((a,b)=>b.value-a.value))}</div><div class="c"><h2>At-risk deals</h2>${oTable(c.rk.slice().sort((a,b)=>b.value-a.value))}</div></div>`}
+function vTgt(c){const a=ach(c.rev,c.tH),g=c.f&&c.th!=null?sum(c.f.exp)-c.th:null,wk=H*52/12;
+return`<div class="g2"><div class="c"><h2>Set target</h2><div class="bar"><label>Period<select id="tp"><option value="M">Monthly</option><option value="Q">Quarterly</option><option value="Y">Annual</option></select></label><label>Amount (${CUR})<input id="ta" type="number" min="0" value="${TGT?Math.round(TGT):''}"></label><button class="p" onclick="setT()">Apply</button></div><p class="note">Targets from an uploaded "Sales Target" column take priority for the months they cover. Quarterly and annual targets are spread evenly across months.</p></div>
+<div class="c"><h2>History</h2>${tbl(['Measure','Value'],[['Revenue',money(c.rev)],['Target',money(c.tH)],['Achievement',`<span class="${tone(a)}">${pct(a)}</span>`],['Revenue vs target',c.tH==null?'–':money(c.rev-c.tH)]])}<div class="pb" style="margin-top:8px"><i style="width:${Math.min(100,(a||0)*100)}%"></i></div></div>
+<div class="c"><h2>Next ${H} months</h2>${tbl(['Measure','Value'],[['Target',money(c.th)],['Expected revenue',money(c.fsum)],['Forecast achievement',c.th&&c.fsum!=null?`<span class="${tone(c.fsum/c.th)}">${pct(c.fsum/c.th)}</span>`:'n/a'],['Gap / surplus',g==null?'–':`<span class="${g>=0?'ok':'bad'}">${money(g)}</span>`],['Required avg sales / week',c.th?money(c.th/wk):'–'],['Required avg sales / day (30-day month)',c.th?money(c.th/(H*30)):'–'],['Extra weekly sales to close gap',g==null?'–':money(Math.max(0,-g)/wk)]])}</div></div>
+<div class="c" style="margin-top:12px"><h2>Management insights</h2><ul>${insights(c).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`}
+function vData(c){const w=WARN.map(x=>`<li class="warn">${esc(x)}</li>`).join('');
+return`<div class="g2"><div class="c"><h2>Data source</h2><p>Currently showing: <b>${esc(SRC)}</b>${SRC==='Demo data'?' — generated sample data, not real results.':''}</p><p><input type="file" id="fi" accept=".csv,.xlsx,.xls"> <button onclick="useDemo()">Use demo data</button></p><p class="note">Accepted columns: Sales Date, Customer Name, Product or Service, Salesperson, Region, Deal Value, Sales Stage, Expected Closing Date, Probability of Closing, Sales Target, Actual Revenue. Only a value and a date column are required. Probabilities may be 0–1 or 0–100. Stages containing "won" or "closed" count as revenue; "lost" is excluded; everything else is open pipeline.</p><div id="err" class="bad"></div></div>
+<div class="c"><h2>Validation</h2>${w?`<ul>${w}</ul>`:'<p class="ok">No issues found.</p>'}<p class="note">${ROWS.length} rows loaded.</p></div></div>
+<div class="c" style="margin-top:12px"><h2>Export</h2><button onclick="exCSV()">Filtered data (CSV)</button> <button onclick="exXLS()">Filtered data + forecast (Excel)</button> <button onclick="exRep()">Forecast report (HTML)</button> <button onclick="exSum()">Management summary (text)</button> <button onclick="exDemo()">Sample dataset (CSV)</button></div>
+<div class="c" style="margin-top:12px"><h2>Filtered data preview</h2>${tbl(['Date','Customer','Product','Salesperson','Region','Stage','Value','Revenue'],c.won.concat(c.open).slice(0,12).map(r=>[ds(r.d),esc(r.customer),esc(r.product),esc(r.rep),esc(r.region),esc(r.stage),money(r.value),money(r.rev)]))}</div>`}
+const vMeth=()=>`<div class="c"><h2>Methodology</h2><ul><li><b>Revenue</b> = "Actual Revenue" when given, otherwise the deal value of won deals, by sales date. Filters apply to every figure; the date filter applies to closed revenue only, so open pipeline always shows all open deals matching the other filters.</li><li><b>Forecast</b> = average of: 3-month moving average; recent growth rate (average of the last 6 monthly changes, capped ±5% per month); linear trend (least squares); seasonal trend (trend × calendar-month index, only with 24+ months).</li><li><b>Scenarios</b> are expected ± a band set by the historical deviation from trend (5–30%). They are a rough range, not a statistical confidence interval.</li><li><b>Weighted pipeline</b> = deal value × probability. It is not added to the forecast because the history-based methods already include typical deal flow.</li><li><b>Forecast accuracy / actual vs forecast</b> come from a backtest: forecast the last 3 months using earlier data and compare. Shown only with 9+ months of history.</li><li><b>Targets</b>: file targets use the first value per salesperson per month, summed across salespeople.</li><li><b>Reproducible</b>: no randomness in forecasts; the demo data uses a fixed seed (dates are relative to today).</li><li><b>Duplicates</b> are rows identical in date, customer, product, salesperson, value, stage and actual revenue; the extra copies are removed on upload.</li></ul></div>`;
+const VIEWS={dash:vDash,fc:vFc,pipe:vPipe,tgt:vTgt,data:vData,meth:vMeth},TABS=[['dash','Dashboard'],['fc','Forecast'],['pipe','Pipeline'],['tgt','Targets & insights'],['data','Data & export'],['meth','Methodology']];
+/* ---------- charts ---------- */
+function ch(id,cfg){CH[id]?.destroy();const e=document.getElementById(id);if(!e)return;cfg.options={responsive:true,maintainAspectRatio:false,...cfg.options};CH[id]=new Chart(e,cfg)}
+const ax=()=>({ticks:{callback:v=>money(v)},grid:{color:col('--grid')}}),tip={tooltip:{callbacks:{label:c=>`${c.dataset.label?c.dataset.label+': ':''}${money(c.raw)}`}}};
+function gb(id,rows,k){const g=grp(rows,k).slice(0,8);ch(id,{type:'bar',data:{labels:g.map(x=>x[0]),datasets:[{data:g.map(x=>x[1]),backgroundColor:col('--ac')}]},options:{indexAxis:'y',plugins:{legend:{display:false},...tip},scales:{x:ax(),y:{grid:{display:false}}}}})}
+function draw(c){Chart.defaults.color=col('--mut');Chart.defaults.font.family='"Public Sans",system-ui,sans-serif';if(TAB!=='dash')return;$('#tr').value=TR;
+const hn=Math.min(c.n,24),L=[],a=[],cn=[],ex=[],op=[],t=[];for(let i=c.n-hn;i<c.n;i++){L.push(ml(c.m0+i));a.push(c.v[i]);cn.push(null);ex.push(null);op.push(null)}
+if(c.f&&hn){cn[hn-1]=ex[hn-1]=op[hn-1]=a[hn-1];for(let i=0;i<H;i++){L.push(ml(c.m0+c.n+i));a.push(null);cn.push(c.f.cons[i]);ex.push(c.f.exp[i]);op.push(c.f.opt[i])}}
+L.forEach((_,i)=>{const m=c.m0+c.n-hn+i;t.push(c.tg(m))});
+const ln=(l,d,co,da)=>({label:l,data:d,borderColor:co,backgroundColor:co,borderDash:da,tension:.25,pointRadius:2,spanGaps:false});
+ch('c1',{type:'line',data:{labels:L,datasets:[ln('Actual',a,col('--ac')),ln('Expected',ex,col('--fc')),ln('Conservative',cn,col('--bad'),[5,4]),ln('Optimistic',op,col('--ok'),[5,4]),...(t.every(x=>x!=null)&&t.length?[ln('Target',t,col('--mut'),[2,3])]:[])]},options:{plugins:tip,scales:{y:ax(),x:{grid:{display:false}}}}});
+let tl=[],tv=[];if(TR==='M'){tl=c.sv.map((_,i)=>ml(c.m0+i));tv=c.sv}else{const q={};c.sv.forEach((x,i)=>{const m=c.m0+i,k=Math.floor(m/12)*4+Math.floor(m%12/3);q[k]=(q[k]||0)+x});Object.keys(q).forEach(k=>{tl.push('Q'+(k%4+1)+' '+Math.floor(k/4));tv.push(q[k])})}
+ch('c2',{type:'bar',data:{labels:tl,datasets:[{data:tv,backgroundColor:col('--ac')}]},options:{plugins:{legend:{display:false},...tip},scales:{y:ax(),x:{grid:{display:false}}}}});
+gb('c3',c.won,'customer');gb('c4',c.won,'product');gb('c5',c.won,'rep');gb('c6',c.won,'region');
+const k=Math.min(12,c.sv.length),L7=[],A7=[],T7=[];for(let i=c.sv.length-k;i<c.sv.length;i++){L7.push(ml(c.m0+i));A7.push(c.sv[i]);T7.push(c.tg(c.m0+i))}
+ch('c7',{type:'bar',data:{labels:L7,datasets:[{type:'bar',label:'Actual',data:A7,backgroundColor:col('--ac')},...(T7.every(x=>x!=null)&&k?[{type:'line',label:'Target',data:T7,borderColor:col('--fc'),backgroundColor:col('--fc'),pointRadius:2}]:[])]},options:{plugins:tip,scales:{y:ax(),x:{grid:{display:false}}}}})}
+/* ---------- controls ---------- */
+function render(){C=calc();const d=SRC==='Demo data';$('#src').textContent=SRC;$('#src').className='badge '+(d?'demo':'up');$('#nav').innerHTML=TABS.map(([k,l])=>`<button class="${k===TAB?'on':''}" onclick="TAB='${k}';render()">${l}</button>`).join('');$('#main').innerHTML=VIEWS[TAB](C);draw(C);
+const t=$('#tr');if(t)t.onchange=()=>{TR=t.value;draw(C)};const f=$('#fi');if(f)f.onchange=()=>f.files[0]&&load(f.files[0])}
+function filters(){const u=k=>[...new Set(ROWS.map(r=>r[k]))].sort(),s=(k,l,a)=>`<label>${l}<select class="f" data-k="${k}"><option value="">All</option>${a.map(x=>`<option>${esc(x)}</option>`).join('')}</select></label>`;
+$('#flt').innerHTML=`<label>From<input type="date" class="f" data-k="from"></label><label>To<input type="date" class="f" data-k="to"></label>${s('rep','Salesperson',u('rep'))}${s('customer','Customer',u('customer'))}${s('region','Region',u('region'))}${s('product','Product',u('product'))}${s('stage','Stage',u('stage'))}<label>Horizon<select id="hz"><option value="3">3 months</option><option value="6" selected>6 months</option><option value="12">12 months</option></select></label><label>Currency<select id="cu"><option>USD</option><option>INR</option><option>EUR</option><option>GBP</option></select></label><button onclick="resetF()">Clear filters</button>`;
+document.querySelectorAll('.f').forEach(e=>e.onchange=()=>{const k=e.dataset.k;F[k]=!e.value?null:k==='from'?new Date(e.value+'T00:00'):k==='to'?new Date(e.value+'T23:59:59'):e.value;render()});
+$('#hz').onchange=e=>{H=+e.target.value;render()};$('#cu').onchange=e=>{CUR=e.target.value;render()};$('#hz').value=H;$('#cu').value=CUR}
+function resetF(){F={};filters();render()}
+function setT(){const a=+$('#ta').value,p=$('#tp').value;if(!(a>0))return toast('Enter a target amount above zero.');TGT=a/(p==='Y'?12:p==='Q'?3:1);render()}
+function useDemo(){ROWS=DEMO;SRC='Demo data';WARN=['Demo data is generated for illustration. Upload a file to analyse your own sales.'];TGT=230000;F={};filters();render()}
+async function load(file){try{let wb;if(/\.csv$/i.test(file.name))wb=XLSX.read(await file.text(),{type:'string',raw:true});else wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
+const o=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:/\.csv$/i.test(file.name)});if(!o.length)throw'The file has no data rows.';const r=ingest(o);if(r.err)throw r.err;if(!r.rows.length)throw'No usable rows after validation.';
+ROWS=r.rows;WARN=r.W;SRC='Uploaded: '+file.name;TGT=null;F={};filters();render()}catch(e){const x=$('#err');if(x)x.textContent='Could not load file: '+(e.message||e)}}
+/* ---------- export ---------- */
+async function save(name,data,type){try{const d=window.claude&&await claude.use('downloads');if(!d)return toast('Downloads are not available in this view.');await d.save({filename:name,data:data instanceof Blob?data:new Blob([data],{type})})}catch(e){if(e&&e.code!=='declined')toast('Could not save: '+(e.message||e))}}
+const HD=['Sales Date','Customer Name','Product or Service','Salesperson','Region','Deal Value','Sales Stage','Expected Closing Date','Probability of Closing','Sales Target','Actual Revenue'];
+const tr=r=>[iso(r.date),r.customer,r.product,r.rep,r.region,r.value??'',r.stage,iso(r.close),r.prob??'',r.target??'',r.actual??''];
+const csv=a=>[HD,...a.map(tr)].map(l=>l.map(x=>/[",\n]/.test(x)?'"'+String(x).replace(/"/g,'""')+'"':x).join(',')).join('\n');
+const exCSV=()=>save('sales-filtered.csv',csv(C.won.concat(C.open)),'text/csv');
+const exDemo=()=>save('sample-sales-data.csv',csv(DEMO),'text/csv');
+function exXLS(){const wb=XLSX.utils.book_new(),rows=C.won.concat(C.open).map(r=>Object.fromEntries(HD.map((h,i)=>[h,tr(r)[i]])));XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Data');
+if(C.f)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(C.f.exp.map((_,i)=>({Month:ml(C.m0+C.n+i),Conservative:Math.round(C.f.cons[i]),Expected:Math.round(C.f.exp[i]),Optimistic:Math.round(C.f.opt[i]),'Weighted pipeline':Math.round(C.pm[i])}))),'Forecast');
+save('sales-forecast.xlsx',new Blob([XLSX.write(wb,{type:'array',bookType:'xlsx'})]))}
+const sumTxt=()=>`Sales management summary (${SRC})\nGenerated ${ds(T0)}. Currency ${CUR}. Forecast horizon ${H} months.\n\nRevenue: ${money(C.rev)} | Open pipeline: ${money(C.tot)} | Weighted: ${money(C.wtd)}\n\n`+insights(C).map(x=>'- '+x).join('\n')+'\n\nForecasts are estimates based on historical data and are not guaranteed.';
+const exSum=()=>save('management-summary.txt',sumTxt(),'text/plain');
+function exRep(){const c=C,f=c.f;const h=`<!doctype html><meta charset="utf-8"><title>Sales forecast report</title><style>body{font:14px system-ui;max-width:820px;margin:24px auto;padding:0 16px}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #ccc;padding:5px;text-align:right}td:first-child,th:first-child{text-align:left}</style><h1>Sales forecast report</h1><p>Source: ${esc(SRC)}. Generated ${ds(T0)}. Currency ${CUR}.</p><h2>Key figures</h2><p>Revenue ${money(c.rev)}; target ${money(c.tH)}; open pipeline ${money(c.tot)}; weighted pipeline ${money(c.wtd)}; forecast accuracy (backtest) ${c.bt?pct(c.bt.acc):'n/a'}.</p><h2>Insights</h2><ul>${insights(c).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>${f?`<h2>Forecast, next ${H} months</h2>${tbl(['Month','Conservative','Expected','Optimistic'],f.exp.map((_,i)=>[ml(c.m0+c.n+i),money(f.cons[i]),money(f.exp[i]),money(f.opt[i])]))}<h2>Methods</h2><ul>${Object.keys(f.m).map(k=>`<li>${esc(k)}</li>`).join('')}</ul><p>Expected is the average of these methods; scenarios are expected ∓${pct(f.band)} from historical deviation. Not guaranteed.</p>`:'<p>Not enough history to forecast.</p>'}`;save('sales-forecast-report.html',h,'text/html')}
+DEMO=demo();useDemo();
+</script></body></html>
